@@ -224,6 +224,8 @@
       </div>
     </header>
 
+    <div class="pin-grid" id="ledGrid" style="margin-bottom: 18px;"></div>
+
     <div class="pin-grid" id="pinGrid"></div>
 
     <p class="hint">
@@ -240,6 +242,7 @@
   const pinNumbers = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
 
   const pinGrid = document.getElementById('pinGrid');
+  const ledGrid = document.getElementById('ledGrid');
   const connectBtn = document.getElementById('connectBtn');
   const statusDot = document.getElementById('statusDot');
   const statusText = document.getElementById('statusText');
@@ -250,12 +253,12 @@
   let stateChar = null;
   let switches = {};
 
-  pinNumbers.forEach(num => {
+  function createRow(key, name, sub) {
     const row = document.createElement('div');
     row.className = 'pin-row';
 
     const label = document.createElement('div');
-    label.innerHTML = `<div class="pin-name">D${num}</div><div class="pin-sub">GPIO 디지털 출력</div>`;
+    label.innerHTML = `<div class="pin-name">${name}</div><div class="pin-sub">${sub}</div>`;
 
     const switchWrap = document.createElement('label');
     switchWrap.className = 'switch';
@@ -263,7 +266,7 @@
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.disabled = true;
-    input.addEventListener('change', () => sendPinState(num, input.checked));
+    input.addEventListener('change', () => sendState(key, input.checked));
 
     const slider = document.createElement('span');
     slider.className = 'slider';
@@ -273,9 +276,15 @@
 
     row.appendChild(label);
     row.appendChild(switchWrap);
-    pinGrid.appendChild(row);
 
-    switches[num] = input;
+    switches[key] = input;
+    return row;
+  }
+
+  ledGrid.appendChild(createRow('LED', '보드 LED', '온보드 내장 LED'));
+
+  pinNumbers.forEach(num => {
+    pinGrid.appendChild(createRow(String(num), `D${num}`, 'GPIO 디지털 출력'));
   });
 
   function setConnectedUI(connected, deviceName) {
@@ -341,21 +350,21 @@
 
   function applyStateString(str) {
     str.split(',').forEach(entry => {
-      const [pinStr, stateStr] = entry.split(':');
-      const pin = parseInt(pinStr, 10);
+      const [key, stateStr] = entry.split(':');
+      if (!key) return;
       const state = stateStr === '1';
-      if (switches[pin]) switches[pin].checked = state;
+      if (switches[key]) switches[key].checked = state;
     });
   }
 
-  async function sendPinState(pinNum, isOn) {
+  async function sendState(key, isOn) {
     if (!controlChar) return;
     try {
-      const msg = `${pinNum}:${isOn ? 1 : 0}`;
+      const msg = `${key}:${isOn ? 1 : 0}`;
       await controlChar.writeValue(new TextEncoder().encode(msg));
     } catch (err) {
       console.error(err);
-      switches[pinNum].checked = !isOn;
+      switches[key].checked = !isOn;
       alert('전송 실패: ' + err.message);
     }
   }

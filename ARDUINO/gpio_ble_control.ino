@@ -23,6 +23,9 @@ const int pins[] = { D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13 };
 const int pinCount = sizeof(pins) / sizeof(pins[0]);
 bool pinState[12] = { false };
 
+// 보드 내장 LED (Nano ESP32 온보드 RGB LED, 공통 애노드 방식이라 반전 로직 사용)
+bool ledState = false;
+
 BLECharacteristic *pStateChar;
 BLEServer *pServer;
 bool deviceConnected = false;
@@ -43,8 +46,9 @@ String buildStateString() {
   String s = "";
   for (int i = 0; i < pinCount; i++) {
     s += String(i + 2) + ":" + String(pinState[i] ? 1 : 0);
-    if (i < pinCount - 1) s += ",";
+    s += ",";
   }
+  s += "LED:" + String(ledState ? 1 : 0);
   return s;
 }
 
@@ -54,18 +58,26 @@ class ControlCallbacks : public BLECharacteristicCallbacks {
     int sep = value.indexOf(':');
     if (sep == -1) return;
 
-    int pinNum = value.substring(0, sep).toInt();
+    String key = value.substring(0, sep);
     int state = value.substring(sep + 1).toInt();
-    int index = pinNum - 2;
 
-    if (index < 0 || index >= pinCount) return;
+    if (key == "LED") {
+      ledState = (state == 1);
+      // 온보드 RGB LED는 공통 애노드라 LOW일 때 켜짐 (반전 로직)
+      digitalWrite(LED_BUILTIN, ledState ? LOW : HIGH);
+      Serial.println(ledState ? "보드 LED -> ON" : "보드 LED -> OFF");
+    } else {
+      int pinNum = key.toInt();
+      int index = pinNum - 2;
+      if (index < 0 || index >= pinCount) return;
 
-    pinState[index] = (state == 1);
-    digitalWrite(pins[index], pinState[index] ? HIGH : LOW);
+      pinState[index] = (state == 1);
+      digitalWrite(pins[index], pinState[index] ? HIGH : LOW);
 
-    Serial.print("D");
-    Serial.print(pinNum);
-    Serial.println(pinState[index] ? " -> HIGH" : " -> LOW");
+      Serial.print("D");
+      Serial.print(pinNum);
+      Serial.println(pinState[index] ? " -> HIGH" : " -> LOW");
+    }
 
     String stateStr = buildStateString();
     pStateChar->setValue(stateStr.c_str());
@@ -80,6 +92,9 @@ void setup() {
     pinMode(pins[i], OUTPUT);
     digitalWrite(pins[i], LOW);
   }
+
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);  // 꺼진 상태로 시작 (반전 로직)
 
   BLEDevice::init("Nano-ESP32-GPIO");
   pServer = BLEDevice::createServer();
