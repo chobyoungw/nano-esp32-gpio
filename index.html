@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GPIO 제어">
+<title>Nano ESP32 GPIO 제어</title>
+<style>
+  :root {
+    --ink: #1E2420;
+    --paper: #F3F1E9;
+    --line: #D9D5C7;
+    --moss: #4B5D45;
+    --moss-dim: #8A9784;
+    --live: #C1542C;
+    --card: #ffffff;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, "SF Pro Text", "Apple SD Gothic Neo", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    display: flex;
+    justify-content: center;
+    padding: env(safe-area-inset-top, 24px) 16px calc(env(safe-area-inset-bottom, 16px) + 24px);
+    min-height: 100vh;
+  }
+
+  .sheet {
+    width: 100%;
+    max-width: 440px;
+    padding-top: 28px;
+  }
+
+  header {
+    margin-bottom: 22px;
+  }
+
+  .eyebrow {
+    font-size: 13px;
+    color: var(--moss);
+    margin: 0 0 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    font-weight: 650;
+    margin: 0 0 16px;
+    letter-spacing: -0.01em;
+  }
+
+  .status-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+  }
+
+  .status-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--moss-dim);
+    transition: background 0.2s ease;
+  }
+
+  .dot.connected {
+    background: var(--live);
+    box-shadow: 0 0 0 4px rgba(193, 84, 44, 0.15);
+  }
+
+  .status-text {
+    font-size: 14px;
+    color: var(--ink);
+  }
+
+  .status-sub {
+    font-size: 12px;
+    color: var(--moss-dim);
+    margin-top: 1px;
+  }
+
+  .connect-btn {
+    border: none;
+    background: var(--moss);
+    color: #fff;
+    padding: 9px 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .connect-btn.disconnect {
+    background: transparent;
+    color: var(--live);
+    border: 1px solid var(--live);
+  }
+
+  .connect-btn:disabled {
+    opacity: 0.5;
+  }
+
+  .pin-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+  }
+
+  .pin-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--card);
+    padding: 14px 16px;
+  }
+
+  .pin-name {
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .pin-sub {
+    font-size: 12px;
+    color: var(--moss-dim);
+    margin-top: 2px;
+  }
+
+  .switch {
+    position: relative;
+    width: 50px;
+    height: 30px;
+    flex-shrink: 0;
+  }
+
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .slider {
+    position: absolute;
+    inset: 0;
+    background: var(--line);
+    border-radius: 30px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  .slider::before {
+    content: "";
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    left: 3px;
+    top: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  }
+
+  input:checked + .slider {
+    background: var(--moss);
+  }
+
+  input:checked + .slider::before {
+    transform: translateX(20px);
+  }
+
+  input:disabled + .slider {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .hint {
+    text-align: center;
+    font-size: 13px;
+    color: var(--moss-dim);
+    margin-top: 20px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <header>
+      <p class="eyebrow">Nano ESP32</p>
+      <h1>GPIO 제어</h1>
+
+      <div class="status-card">
+        <div class="status-left">
+          <div class="dot" id="statusDot"></div>
+          <div>
+            <div class="status-text" id="statusText">연결 안 됨</div>
+            <div class="status-sub" id="statusSub">기기를 연결해주세요</div>
+          </div>
+        </div>
+        <button class="connect-btn" id="connectBtn">연결</button>
+      </div>
+    </header>
+
+    <div class="pin-grid" id="pinGrid"></div>
+
+    <p class="hint">
+      아이폰 Safari는 블루투스를 지원하지 않아요.<br>
+      "Bluefy – Web BLE Browser" 앱으로 이 페이지를 열어주세요.
+    </p>
+  </div>
+
+<script>
+  const SERVICE_UUID = "12345678-1234-5678-1234-56789abcdef0";
+  const CHAR_CONTROL_UUID = "12345678-1234-5678-1234-56789abcdef1";
+  const CHAR_STATE_UUID = "12345678-1234-5678-1234-56789abcdef2";
+
+  const pinNumbers = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+
+  const pinGrid = document.getElementById('pinGrid');
+  const connectBtn = document.getElementById('connectBtn');
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const statusSub = document.getElementById('statusSub');
+
+  let bleDevice = null;
+  let controlChar = null;
+  let stateChar = null;
+  let switches = {};
+
+  pinNumbers.forEach(num => {
+    const row = document.createElement('div');
+    row.className = 'pin-row';
+
+    const label = document.createElement('div');
+    label.innerHTML = `<div class="pin-name">D${num}</div><div class="pin-sub">GPIO 디지털 출력</div>`;
+
+    const switchWrap = document.createElement('label');
+    switchWrap.className = 'switch';
+
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.disabled = true;
+    input.addEventListener('change', () => sendPinState(num, input.checked));
+
+    const slider = document.createElement('span');
+    slider.className = 'slider';
+
+    switchWrap.appendChild(input);
+    switchWrap.appendChild(slider);
+
+    row.appendChild(label);
+    row.appendChild(switchWrap);
+    pinGrid.appendChild(row);
+
+    switches[num] = input;
+  });
+
+  function setConnectedUI(connected, deviceName) {
+    statusDot.classList.toggle('connected', connected);
+    statusText.textContent = connected ? (deviceName || '연결됨') : '연결 안 됨';
+    statusSub.textContent = connected ? '실시간으로 GPIO를 제어할 수 있어요' : '기기를 연결해주세요';
+    connectBtn.textContent = connected ? '연결 해제' : '연결';
+    connectBtn.classList.toggle('disconnect', connected);
+    Object.values(switches).forEach(sw => sw.disabled = !connected);
+  }
+
+  async function connect() {
+    if (!navigator.bluetooth) {
+      alert('이 브라우저는 블루투스를 지원하지 않습니다. Bluefy 앱을 사용해주세요.');
+      return;
+    }
+
+    try {
+      bleDevice = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [SERVICE_UUID] }]
+      });
+
+      bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
+      const server = await bleDevice.gatt.connect();
+      const service = await server.getPrimaryService(SERVICE_UUID);
+
+      controlChar = await service.getCharacteristic(CHAR_CONTROL_UUID);
+      stateChar = await service.getCharacteristic(CHAR_STATE_UUID);
+
+      await stateChar.startNotifications();
+      stateChar.addEventListener('characteristicvaluechanged', onStateChanged);
+
+      const initial = await stateChar.readValue();
+      applyStateString(new TextDecoder().decode(initial));
+
+      setConnectedUI(true, bleDevice.name);
+    } catch (err) {
+      console.error(err);
+      if (err.name !== 'NotFoundError') {
+        alert('연결에 실패했습니다: ' + err.message);
+      }
+    }
+  }
+
+  function onDisconnected() {
+    setConnectedUI(false);
+    controlChar = null;
+    stateChar = null;
+  }
+
+  function disconnect() {
+    if (bleDevice && bleDevice.gatt.connected) {
+      bleDevice.gatt.disconnect();
+    }
+    onDisconnected();
+  }
+
+  function onStateChanged(event) {
+    const value = new TextDecoder().decode(event.target.value);
+    applyStateString(value);
+  }
+
+  function applyStateString(str) {
+    str.split(',').forEach(entry => {
+      const [pinStr, stateStr] = entry.split(':');
+      const pin = parseInt(pinStr, 10);
+      const state = stateStr === '1';
+      if (switches[pin]) switches[pin].checked = state;
+    });
+  }
+
+  async function sendPinState(pinNum, isOn) {
+    if (!controlChar) return;
+    try {
+      const msg = `${pinNum}:${isOn ? 1 : 0}`;
+      await controlChar.writeValue(new TextEncoder().encode(msg));
+    } catch (err) {
+      console.error(err);
+      switches[pinNum].checked = !isOn;
+      alert('전송 실패: ' + err.message);
+    }
+  }
+
+  connectBtn.addEventListener('click', () => {
+    if (bleDevice && bleDevice.gatt.connected) {
+      disconnect();
+    } else {
+      connect();
+    }
+  });
+</script>
+</body>
+</html>
