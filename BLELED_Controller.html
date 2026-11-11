@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>LED Strip Controller</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel2: #1e222b;
+    --line: #2a2f3a;
+    --text: #e6e8ec;
+    --muted: #8b93a3;
+    --accent: #4f8cff;
+    --ok: #34c77b;
+    --warn: #f0a83a;
+    --bad: #f05252;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; }
+  header {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  h1 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: -0.2px; }
+  .sub { color: var(--muted); font-size: 12px; }
+  .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px; background: var(--panel2);
+    border: 1px solid var(--line); font-size: 12px; color: var(--muted);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .pill.on .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .pill.on { color: var(--text); }
+  button {
+    font: inherit; color: var(--text); background: var(--panel2);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px;
+    cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  button:hover { border-color: #3a4152; background: #242935; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.primary:hover { background: #3f7af0; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .warnbox {
+    background: #2a1f12; border: 1px solid #5a4020; color: #f3c98a;
+    padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; display: none;
+  }
+  .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) {
+    .wrap { padding: 12px 10px 30px; }
+    header { gap: 8px; }
+    header .spacer { display: none; }
+    header > div:first-child { width: 100%; }
+    header button { flex: 1; padding: 11px 8px; }
+    .strip { grid-template-columns: repeat(15, 1fr); gap: 5px; padding: 10px; }
+    .modes button { padding: 13px 4px; }
+    .card { padding: 13px; }
+    .log { height: 110px; }
+    input[type=range] { height: 28px; }
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px;
+  }
+  .card h2 {
+    font-size: 13px; margin: 0 0 12px; color: var(--muted);
+    font-weight: 600; text-transform: uppercase; letter-spacing: .6px;
+  }
+  .strip {
+    display: grid; grid-template-columns: repeat(30, 1fr); gap: 4px;
+    padding: 12px; background: #0a0b0e; border-radius: 10px;
+    border: 1px solid var(--line); user-select: none; touch-action: none;
+  }
+  .px {
+    aspect-ratio: 1; border-radius: 50%; background: #000;
+    border: 1px solid #22262f; position: relative;
+  }
+  .strip.paint .px { cursor: crosshair; }
+  .strip.paint .px:hover { outline: 2px solid #fff6; outline-offset: 1px; }
+  .stripmeta { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .modes button { padding: 10px 8px; }
+  .modes button.active { background: #22314f; border-color: var(--accent); color: #fff; }
+  .row { display: flex; align-items: center; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
+  .row label { min-width: 74px; color: var(--muted); }
+  input[type=range] { flex: 1; min-width: 140px; accent-color: var(--accent); }
+  .val { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=color] {
+    width: 46px; height: 34px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel2); padding: 2px; cursor: pointer;
+  }
+  input[type=number], select {
+    font: inherit; color: var(--text); background: var(--panel2);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 72px;
+  }
+  select { width: auto; }
+  .swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+  .sw { width: 26px; height: 26px; border-radius: 6px; border: 1px solid #0006; cursor: pointer; }
+  .sw:hover { transform: scale(1.1); }
+  .hint { color: var(--muted); font-size: 12px; }
+  .est { font-size: 12px; color: var(--muted); }
+  .est b { color: var(--text); }
+  .est.over b { color: var(--warn); }
+  .log {
+    height: 150px; overflow: auto; background: #0a0b0e; border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 10px; font: 12px/1.45 Consolas, monospace; color: #aab2c0;
+  }
+  .log .tx { color: #7fb0ff; } .log .rx { color: #8be0a8; } .log .er { color: #ff8a8a; }
+  .paintbar { display: none; }
+  .paintbar.show { display: block; }
+  .disabled-overlay { opacity: .5; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>LED Strip Controller</h1>
+      <div class="sub">FIT0356 · WS2812 · 90 LED · USB 또는 블루투스</div>
+    </div>
+    <div class="spacer"></div>
+    <span id="status" class="pill"><span class="dot"></span><span id="statusText">연결 안 됨</span></span>
+    <button id="btnUsb" class="primary">USB 연결</button>
+    <button id="btnBle" class="primary">블루투스 연결</button>
+  </header>
+
+  <div id="noSerial" class="warnbox">
+    이 브라우저는 USB/블루투스 연결을 지원하지 않습니다.<br>
+    · PC: <b>Chrome</b> 또는 <b>Edge</b><br>
+    · 아이폰: App Store의 <b>Bluefy</b> 앱에서 이 페이지(https 주소)를 열어주세요<br>
+    · 안드로이드: <b>Chrome</b>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <h2>미리보기</h2>
+    <div id="strip" class="strip"></div>
+    <div class="stripmeta">
+      <span id="stripHint">색상 미리보기 (밝기 미반영)</span>
+      <span>DIN → LED 0 … 89</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="card" style="margin-bottom:14px">
+        <h2>모드</h2>
+        <div class="modes" id="modes"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <h2>색상</h2>
+        <div class="row">
+          <label>색상 1</label>
+          <input type="color" id="c1" value="#ffffff">
+          <div class="swatches" id="sw1"></div>
+        </div>
+        <div class="row">
+          <label>색상 2</label>
+          <input type="color" id="c2" value="#0000ff">
+          <div class="swatches" id="sw2"></div>
+        </div>
+        <div class="hint">색상 2는 그라데이션 끝색, 체이스 배경색으로 쓰입니다.</div>
+      </div>
+
+      <div class="card paintbar" id="paintbar">
+        <h2>페인트</h2>
+        <div class="hint" style="margin-bottom:8px">미리보기의 LED를 클릭하거나 드래그하면 <b>색상 1</b>로 칠해집니다. 우클릭은 지우기.</div>
+        <div class="row">
+          <label>구간</label>
+          <input type="number" id="fa" value="0" min="0" max="89">
+          <span>~</span>
+          <input type="number" id="fb" value="89" min="0" max="89">
+          <button id="btnFill">색상 1로 채우기</button>
+          <button id="btnClear">전체 지우기</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" style="margin-bottom:14px">
+        <h2>밝기 · 속도</h2>
+        <div class="row">
+          <label>밝기</label>
+          <input type="range" id="bri" min="0" max="255" value="15">
+          <span class="val" id="briVal">15</span>
+        </div>
+        <div class="row">
+          <label>속도</label>
+          <input type="range" id="spd" min="1" max="100" value="50">
+          <span class="val" id="spdVal">50</span>
+        </div>
+        <div class="est" id="est"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <h2>전원 보호</h2>
+        <div class="row">
+          <label>전류 상한</label>
+          <select id="maxma">
+            <option value="300">300 mA · 나노 5V 핀 (여유)</option>
+            <option value="400" selected>400 mA · 나노 5V 핀</option>
+            <option value="1000">1000 mA · 외부 전원</option>
+            <option value="2000">2000 mA · 외부 전원</option>
+            <option value="3000">3000 mA · 외부 전원</option>
+          </select>
+        </div>
+        <div class="hint">나노 5V 핀으로 스트립에 전원을 줄 때는 <b>400mA 이하</b>로 두세요. 이 상한을 넘지 않도록 펌웨어가 밝기를 자동으로 낮춥니다.</div>
+      </div>
+
+      <div class="card">
+        <h2>통신 로그</h2>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const N = 90;
+  const MODES = [
+    { id: 0, name: '꺼짐' },
+    { id: 1, name: '단색' },
+    { id: 2, name: '무지개' },
+    { id: 3, name: '숨쉬기' },
+    { id: 4, name: '그라데이션' },
+    { id: 5, name: '체이스' },
+    { id: 6, name: '혜성' },
+    { id: 7, name: '반짝임' },
+    { id: 8, name: '페인트' },
+  ];
+  const SWATCHES = ['#ffffff','#ff0000','#ff6a00','#ffd000','#00ff00','#00ffd0','#0080ff','#0000ff','#8000ff','#ff00a0','#000000'];
+
+  const $ = id => document.getElementById(id);
+  const state = {
+    mode: 1, c1: [255,255,255], c2: [0,0,255],
+    bri: 15, spd: 50, maxma: 400,
+    paint: Array.from({length: N}, () => [0,0,0]),
+  };
+
+  // ───────── 미리보기 스트립
+  const stripEl = $('strip');
+  const pxEls = [];
+  for (let i = 0; i < N; i++) {
+    const d = document.createElement('div');
+    d.className = 'px'; d.dataset.i = i; d.title = 'LED ' + i;
+    stripEl.appendChild(d); pxEls.push(d);
+  }
+  const sim = Array.from({length: N}, () => [0,0,0]);
+
+  function drawSim() {
+    for (let i = 0; i < N; i++) {
+      const [r,g,b] = sim[i];
+      const lit = r + g + b > 0;
+      pxEls[i].style.background = `rgb(${r},${g},${b})`;
+      pxEls[i].style.boxShadow = lit ? `0 0 8px rgba(${r},${g},${b},.55)` : 'none';
+    }
+  }
+
+  // 펌웨어와 같은 로직으로 미리보기 시뮬레이션
+  let frame = 0, lastT = 0;
+  const sin8 = x => Math.round((Math.sin(((x & 255) / 256) * Math.PI * 2) + 1) * 127.5);
+  const hsv = h => {
+    const s = 1, v = 1, hh = (h % 256) / 256 * 6, i = Math.floor(hh), f = hh - i;
+    const p = 0, q = 1 - f, t = f;
+    const m = [[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][i % 6];
+    return m.map(x => Math.round(x * 255));
+  };
+  const interval = () => 100 - Math.floor((state.spd - 1) * 95 / 99);
+  const fade = amt => { for (const p of sim) for (let k = 0; k < 3; k++) p[k] = Math.floor(p[k] * (256 - amt) / 256); };
+
+  function renderStatic() {
+    const m = state.mode;
+    for (let i = 0; i < N; i++) {
+      if (m === 0) sim[i] = [0,0,0];
+      else if (m === 1) sim[i] = state.c1.slice();
+      else if (m === 4) {
+        const t = i / (N - 1);
+        sim[i] = state.c1.map((a, k) => Math.round(a + (state.c2[k] - a) * t));
+      } else if (m === 8) sim[i] = state.paint[i].slice();
+    }
+    drawSim();
+  }
+
+  function renderFrame() {
+    frame = (frame + 1) & 0xffff;
+    const m = state.mode;
+    if (m === 2) for (let i = 0; i < N; i++) sim[i] = hsv((frame + i * 3) & 255);
+    else if (m === 3) {
+      const lvl = 15 + Math.floor(sin8(frame * 2) * 240 / 256);
+      for (let i = 0; i < N; i++) sim[i] = state.c1.map(x => Math.round(x * lvl / 255));
+    } else if (m === 5) for (let i = 0; i < N; i++) sim[i] = ((i + frame) % 4 === 0) ? state.c1.slice() : state.c2.slice();
+    else if (m === 6) { fade(60); sim[frame % N] = state.c1.slice(); }
+    else if (m === 7) { fade(20); if (Math.random() < 90/256) sim[Math.floor(Math.random()*N)] = state.c1.slice(); }
+    drawSim();
+  }
+
+  const animated = () => [2,3,5,6,7].includes(state.mode);
+  function tick(t) {
+    if (animated() && t - lastT >= interval()) { lastT = t; renderFrame(); }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // ───────── 로그
+  const logEl = $('log');
+  function log(msg, cls = '') {
+    const line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = msg;
+    logEl.appendChild(line);
+    while (logEl.childNodes.length > 200) logEl.removeChild(logEl.firstChild);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // ───────── 연결 (USB 시리얼 / 블루투스 BLE)
+  const NUS_SVC = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+  const NUS_RX  = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';   // 쓰기 (휴대폰 → 보드)
+  const NUS_TX  = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';   // 알림 (보드 → 휴대폰)
+
+  let link = null;          // 'usb' | 'ble' | null
+  let connected = false;
+  let port = null, reader = null, writer = null;           // USB
+  let bleDev = null, bleRx = null, bleTx = null;           // BLE
+  let rxLine = '';
+  let waiter = null;   // { kind: 'bang'|'resp', resolve, timer }
+
+  function setStatus(on, text) {
+    $('status').classList.toggle('on', on);
+    $('statusText').textContent = text;
+    $('btnUsb').textContent = on && link === 'usb' ? 'USB 해제' : 'USB 연결';
+    $('btnBle').textContent = on && link === 'ble' ? '블루투스 해제' : '블루투스 연결';
+    $('btnUsb').classList.toggle('primary', !(on && link === 'usb'));
+    $('btnBle').classList.toggle('primary', !(on && link === 'ble'));
+    $('btnUsb').disabled = !('serial' in navigator) || (on && link === 'ble');
+    $('btnBle').disabled = !('bluetooth' in navigator) || (on && link === 'usb');
+  }
+
+  function resolveWaiter(kind, value) {
+    if (waiter && waiter.kind === kind) {
+      clearTimeout(waiter.timer);
+      const w = waiter; waiter = null; w.resolve(value);
+    }
+  }
+  function waitFor(kind, ms) {
+    return new Promise(resolve => {
+      waiter = { kind, resolve, timer: setTimeout(() => { waiter = null; resolve(null); }, ms) };
+    });
+  }
+
+  let readyResolve = null;
+  function onRxChar(ch) {
+    if (ch === '!') { resolveWaiter('bang', true); return; }
+    if (ch === '\n') {
+      const line = rxLine.trim(); rxLine = '';
+      if (!line) return;
+      if (line === 'OK' || line === 'ERR') { resolveWaiter('resp', line); if (line === 'ERR') log('← ERR', 'er'); }
+      else if (line === 'READY') { log('← READY (보드 준비 완료)', 'rx'); if (readyResolve) { readyResolve(); readyResolve = null; } }
+      else log('← ' + line, 'rx');
+      return;
+    }
+    if (ch !== '\r') rxLine += ch;
+  }
+
+  const enc = new TextEncoder();
+  const dec = new TextDecoder();
+
+  async function write(str) {
+    const data = enc.encode(str);
+    if (link === 'usb') { await writer.write(data); return; }
+    // BLE: 20바이트 단위로 나눠 전송 (아이폰 기본 MTU 고려)
+    for (let i = 0; i < data.length; i += 20) {
+      const chunk = data.slice(i, i + 20);
+      if (bleRx.writeValueWithResponse) await bleRx.writeValueWithResponse(chunk);
+      else await bleRx.writeValue(chunk);
+    }
+  }
+
+  async function transact(cmd) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (link === 'usb') {                     // USB: 핸드셰이크 후 명령
+          const bang = waitFor('bang', 200);
+          await write('~');
+          if (!(await bang)) continue;
+        }
+        const resp = waitFor('resp', link === 'ble' ? 1500 : 400);
+        await write(cmd + '\n');
+        const r = await resp;
+        if (r) return r;
+      } catch (e) {
+        log('전송 오류: ' + e.message, 'er');
+        if (!connected) return null;
+      }
+    }
+    log('✕ 응답 없음: ' + cmd, 'er');
+    return null;
+  }
+
+  // 명령 큐 (같은 설정은 최신 값으로 합침 → 슬라이더를 빨리 움직여도 밀리지 않음)
+  const queue = [];
+  let busy = false;
+  const MERGEABLE = new Set(['A', 'B', 'S', 'C', 'D']);
+  function send(cmd, key = cmd[0]) {
+    if (!connected) return;
+    const idx = MERGEABLE.has(key) ? queue.findIndex(q => q.key === key) : -1;
+    if (idx >= 0) queue[idx].cmd = cmd; else queue.push({ key, cmd });
+    pump();
+  }
+  async function pump() {
+    if (busy) return;
+    busy = true;
+    try {
+      while (connected && queue.length) {
+        const { cmd } = queue.shift();
+        log('→ ' + cmd, 'tx');
+        await transact(cmd);
+      }
+    } finally { busy = false; }
+  }
+
+  // USB
+  async function readLoop() {
+    try {
+      while (connected && link === 'usb' && port.readable) {
+        reader = port.readable.getReader();
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            for (const ch of dec.decode(value)) onRxChar(ch);
+          }
+        } finally { reader.releaseLock(); }
+      }
+    } catch (e) {
+      if (connected) { log('수신 오류: ' + e.message, 'er'); disconnect(); }
+    }
+  }
+
+  async function connectUsb() {
+    try {
+      port = await navigator.serial.requestPort();
+      await port.open({ baudRate: 115200 });
+    } catch (e) {
+      if (e.name !== 'NotFoundError') log('연결 실패: ' + e.message + ' (다른 프로그램이 COM 포트를 쓰고 있으면 닫아주세요)', 'er');
+      return;
+    }
+    writer = port.writable.getWriter();
+    link = 'usb'; connected = true;
+    setStatus(true, 'USB 연결됨 · 보드 재부팅 대기');
+    log('USB 포트 열림. 보드 재부팅 대기 중…');
+    readLoop();
+    await Promise.race([
+      new Promise(r => { readyResolve = r; }),
+      new Promise(r => setTimeout(r, 3000)),
+    ]);
+    readyResolve = null;
+    setStatus(true, 'USB 연결됨');
+    syncAll();
+  }
+
+  // BLE
+  async function connectBle() {
+    try {
+      log('블루투스 장치 검색… 목록에서 LED-Controller 를 선택하세요');
+      bleDev = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [NUS_SVC] }, { namePrefix: 'LED-Controller' }],
+        optionalServices: [NUS_SVC],
+      });
+      bleDev.addEventListener('gattserverdisconnected', () => {
+        if (connected && link === 'ble') { log('블루투스 연결이 끊어졌습니다', 'er'); cleanup(); }
+      });
+      setStatus(false, '블루투스 연결 중…');
+      const gatt = await bleDev.gatt.connect();
+      const svc = await gatt.getPrimaryService(NUS_SVC);
+      bleRx = await svc.getCharacteristic(NUS_RX);
+      bleTx = await svc.getCharacteristic(NUS_TX);
+      await bleTx.startNotifications();
+      bleTx.addEventListener('characteristicvaluechanged', e => {
+        for (const ch of dec.decode(e.target.value)) onRxChar(ch);
+      });
+    } catch (e) {
+      if (e.name !== 'NotFoundError') log('블루투스 연결 실패: ' + e.message, 'er');
+      setStatus(false, '연결 안 됨');
+      return;
+    }
+    link = 'ble'; connected = true;
+    setStatus(true, '블루투스 연결됨 · ' + (bleDev.name || 'LED-Controller'));
+    log('블루투스 연결됨: ' + (bleDev.name || ''), 'rx');
+    syncAll();
+  }
+
+  function cleanup() {
+    connected = false;
+    queue.length = 0;
+    port = reader = writer = null;
+    bleRx = bleTx = null;
+    link = null;
+    setStatus(false, '연결 안 됨');
+  }
+
+  async function disconnect() {
+    const was = link;
+    connected = false;
+    queue.length = 0;
+    if (was === 'usb') {
+      try { if (reader) await reader.cancel(); } catch {}
+      await new Promise(r => setTimeout(r, 50));
+      try { if (writer) writer.releaseLock(); } catch {}
+      try { if (port) await port.close(); } catch {}
+    } else if (was === 'ble') {
+      try { if (bleDev && bleDev.gatt.connected) bleDev.gatt.disconnect(); } catch {}
+    }
+    cleanup();
+    log('연결 해제');
+  }
+
+  $('btnUsb').onclick = () => (connected && link === 'usb') ? disconnect() : connectUsb();
+  $('btnBle').onclick = () => (connected && link === 'ble') ? disconnect() : connectBle();
+  if (!('serial' in navigator)) $('btnUsb').style.display = 'none';
+  if (!('bluetooth' in navigator)) $('btnBle').style.display = 'none';
+  if (!('serial' in navigator) && !('bluetooth' in navigator)) $('noSerial').style.display = 'block';
+  setStatus(false, '연결 안 됨');
+
+  // ───────── 현재 GUI 상태 전체 전송
+  const rgb = c => c.join(',');
+  function syncAll() {
+    send('A ' + state.maxma);
+    send('B ' + state.bri);
+    send('S ' + state.spd);
+    send('C ' + rgb(state.c1));
+    send('D ' + rgb(state.c2));
+    if (state.mode === 8) {
+      send('X');
+      state.paint.forEach((p, i) => { if (p[0] || p[1] || p[2]) send(`P ${i},${rgb(p)}`, 'P' + i); });
+    } else send('M ' + state.mode);
+    send('?');
+  }
+
+  // ───────── 모드
+  const modesEl = $('modes');
+  MODES.forEach(m => {
+    const b = document.createElement('button');
+    b.textContent = m.name; b.dataset.id = m.id;
+    b.onclick = () => setMode(m.id);
+    modesEl.appendChild(b);
+  });
+  function setMode(id) {
+    state.mode = id;
+    [...modesEl.children].forEach(b => b.classList.toggle('active', +b.dataset.id === id));
+    const paint = id === 8;
+    $('paintbar').classList.toggle('show', paint);
+    stripEl.classList.toggle('paint', paint);
+    $('stripHint').textContent = paint ? '클릭/드래그로 칠하기 · 우클릭 지우기' : '색상 미리보기 (밝기 미반영)';
+    if (id === 6 || id === 7) sim.forEach(p => p.fill(0));
+    if (paint) {
+      state.paint = Array.from({length: N}, () => [0,0,0]);
+      send('X');
+    } else send('M ' + id);
+    if (!animated()) renderStatic();
+  }
+
+  // ───────── 색상
+  const hex2rgb = h => [1,3,5].map(i => parseInt(h.substr(i, 2), 16));
+  function bindColor(inputId, swId, key, cmdLetter) {
+    const inp = $(inputId);
+    const apply = hex => {
+      inp.value = hex;
+      state[key] = hex2rgb(hex);
+      send(cmdLetter + ' ' + rgb(state[key]));
+      if (!animated()) renderStatic();
+      updateEst();
+    };
+    inp.addEventListener('input', () => apply(inp.value));
+    const sw = $(swId);
+    SWATCHES.forEach(h => {
+      const s = document.createElement('div');
+      s.className = 'sw'; s.style.background = h; s.title = h;
+      s.onclick = () => apply(h);
+      sw.appendChild(s);
+    });
+  }
+  bindColor('c1', 'sw1', 'c1', 'C');
+  bindColor('c2', 'sw2', 'c2', 'D');
+
+  // ───────── 밝기 / 속도 / 전류
+  $('bri').addEventListener('input', e => {
+    state.bri = +e.target.value; $('briVal').textContent = state.bri;
+    send('B ' + state.bri); updateEst();
+  });
+  $('spd').addEventListener('input', e => {
+    state.spd = +e.target.value; $('spdVal').textContent = state.spd;
+    send('S ' + state.spd);
+  });
+  $('maxma').addEventListener('change', e => {
+    const v = +e.target.value;
+    if (v > 400 && !confirm('400mA를 초과하는 설정은 외부 5V 전원으로 스트립에 전원을 줄 때만 사용하세요.\n나노 5V 핀에 연결된 상태라면 보드나 USB 포트가 손상될 수 있습니다.\n\n계속할까요?')) {
+      e.target.value = state.maxma; return;
+    }
+    state.maxma = v; send('A ' + v); updateEst();
+  });
+
+  function updateEst() {
+    // 흰색 최대 전류 기준 대략 추정 (LED당 60mA @255) + 대기전류
+    const full = N * 60 * state.bri / 255 + N * 0.7;
+    const capped = Math.min(full, state.maxma);
+    const el = $('est');
+    el.classList.toggle('over', full > state.maxma);
+    el.innerHTML = `흰색 전체 점등 시 예상 전류 <b>${Math.round(full)} mA</b>` +
+      (full > state.maxma ? ` → 상한 ${state.maxma} mA로 자동 제한` : '');
+  }
+
+  // ───────── 페인트
+  let painting = false, eraseMode = false;
+  function paintAt(el) {
+    if (state.mode !== 8 || !el || !el.classList.contains('px')) return;
+    const i = +el.dataset.i;
+    const c = eraseMode ? [0,0,0] : state.c1.slice();
+    const p = state.paint[i];
+    if (p[0] === c[0] && p[1] === c[1] && p[2] === c[2]) return;
+    state.paint[i] = c;
+    sim[i] = c.slice(); drawSim();
+    send(`P ${i},${rgb(c)}`, 'P' + i);
+  }
+  stripEl.addEventListener('contextmenu', e => { if (state.mode === 8) e.preventDefault(); });
+  stripEl.addEventListener('pointerdown', e => {
+    if (state.mode !== 8) return;
+    painting = true; eraseMode = e.button === 2;
+    paintAt(e.target);
+  });
+  window.addEventListener('pointerup', () => painting = false);
+  stripEl.addEventListener('pointermove', e => {
+    if (!painting) return;
+    paintAt(document.elementFromPoint(e.clientX, e.clientY));
+  });
+
+  $('btnFill').onclick = () => {
+    let a = Math.max(0, Math.min(N-1, +$('fa').value)), b = Math.max(0, Math.min(N-1, +$('fb').value));
+    if (a > b) [a, b] = [b, a];
+    for (let i = a; i <= b; i++) state.paint[i] = state.c1.slice();
+    send(`F ${a},${b},${rgb(state.c1)}`, 'F' + a + '-' + b);
+    renderStatic();
+  };
+  $('btnClear').onclick = () => {
+    state.paint = Array.from({length: N}, () => [0,0,0]);
+    send('X');
+    renderStatic();
+  };
+
+  // ───────── 초기화
+  setMode(1);
+  updateEst();
+  log(('bluetooth' in navigator) ? '[블루투스 연결] 또는 [USB 연결]을 누르세요.' : (('serial' in navigator) ? '[USB 연결]을 눌러 COM 포트를 선택하세요.' : '이 브라우저는 연결을 지원하지 않습니다.'));
+})();
+</script>
+</body>
+</html>
